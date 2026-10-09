@@ -327,11 +327,21 @@ def send_approval_email(post_id: str, post_text: str, image_path: str, base_url:
         img.add_header("Content-ID", "<post_image>")
         msg.attach(img)
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
-    
-    logger.info("Approval email sent successfully.")
+    try:
+        logger.info("Connecting to Gmail SMTP via Port 587 (STARTTLS)...")
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
+        logger.info("Approval email sent successfully via Port 587.")
+    except Exception as e587:
+        logger.warning(f"Port 587 connection failed ({e587}), trying Port 465 (SSL)...")
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
+        logger.info("Approval email sent successfully via Port 465.")
 
 def publish_to_linkedin(text_content: str, image_path: str):
     """3-step LinkedIn API image upload and publish routine."""
