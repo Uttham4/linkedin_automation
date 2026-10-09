@@ -2,6 +2,7 @@ import os
 import json
 import smtplib
 import logging
+import threading
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -364,7 +365,16 @@ def send_approval_email(post_id: str, post_text: str, image_path: str, base_url:
             logger.error(f"SMTP connection blocked or failed on cloud host: {e465}")
             email_sent = False
 
-    return email_sent, approve_url
+def send_approval_email_async(post_id: str, post_text: str, image_path: str, base_url: str = None):
+    """Fires background thread to send email without blocking the HTTP response."""
+    def _send_worker():
+        try:
+            send_approval_email(post_id, post_text, image_path, base_url)
+        except Exception as e:
+            logger.error(f"Background email delivery failed: {e}")
+            
+    thread = threading.Thread(target=_send_worker, daemon=True)
+    thread.start()
 
 def publish_to_linkedin(text_content: str, image_path: str):
     """3-step LinkedIn API image upload and publish routine."""
@@ -465,14 +475,16 @@ def trigger_generation():
         PENDING_POSTS[post_id] = {"text": post_text, "image_path": image_path}
         save_pending_posts(PENDING_POSTS)
         
-        email_sent, approve_url = send_approval_email(post_id, post_text, image_path, base_url=get_base_url(request))
+        effective_url = get_base_url(request).rstrip('/')
+        approve_url = f"{effective_url}/approve?post_id={post_id}"
+        
+        send_approval_email_async(post_id, post_text, image_path, base_url=effective_url)
         
         return jsonify({
             "status": "success",
             "message": "Topic post generated successfully!",
             "post_id": post_id,
             "approve_url": approve_url,
-            "email_sent": email_sent,
             "keyword_used": keyword,
             "post_text": post_text
         }), 200
@@ -505,14 +517,16 @@ def trigger_github():
         PENDING_POSTS[post_id] = {"text": post_text, "image_path": image_path}
         save_pending_posts(PENDING_POSTS)
 
-        email_sent, approve_url = send_approval_email(post_id, post_text, image_path, base_url=get_base_url(request))
+        effective_url = get_base_url(request).rstrip('/')
+        approve_url = f"{effective_url}/approve?post_id={post_id}"
+
+        send_approval_email_async(post_id, post_text, image_path, base_url=effective_url)
 
         return jsonify({
             "status": "success",
             "message": "GitHub commit vlog generated successfully!",
             "post_id": post_id,
             "approve_url": approve_url,
-            "email_sent": email_sent,
             "has_commits_today": github_info["has_commits_today"],
             "commits_found": len(github_info["commits"]),
             "keyword_used": keyword,
