@@ -216,13 +216,27 @@ def fetch_github_activity(username: str, token: str = None, force_latest: bool =
         r_res = requests.get(r_url, headers=headers, timeout=10)
         if r_res.status_code == 200:
             rdata = r_res.json()
+            
+            # Fetch dependencies from requirements.txt or package.json if available
+            deps = []
+            req_url = f"https://api.github.com/repos/{rname}/contents/requirements.txt"
+            req_res = requests.get(req_url, headers=headers, timeout=5)
+            if req_res.status_code == 200:
+                import base64
+                try:
+                    content = base64.b64decode(req_res.json().get("content", "")).decode("utf-8", errors="ignore")
+                    deps = [line.split("==")[0].split(">=")[0].strip() for line in content.splitlines() if line and not line.startswith("#")]
+                except Exception:
+                    pass
+                    
             repos_meta.append({
                 "name": rdata.get("name"),
                 "full_name": rdata.get("full_name"),
                 "description": rdata.get("description") or "Project updates & features",
                 "language": rdata.get("language") or "Software Development",
                 "stars": rdata.get("stargazers_count", 0),
-                "html_url": rdata.get("html_url")
+                "html_url": rdata.get("html_url"),
+                "dependencies": deps[:10]
             })
 
     return {
@@ -231,6 +245,48 @@ def fetch_github_activity(username: str, token: str = None, force_latest: bool =
         "commits": commits_data,
         "repos": repos_meta
     }
+
+def extract_repo_code_context(username: str, repo_full_name: str, headers: dict = None) -> str:
+    """Reads the repository's README.md and primary source code files via GitHub API to extract actual models, APIs, and stack details."""
+    logger.info(f"Performing deep code & README inspection for repository: {repo_full_name}")
+    code_snippets = []
+    
+    # 1. Fetch README.md
+    readme_url = f"https://api.github.com/repos/{repo_full_name}/readme"
+    try:
+        r_res = requests.get(readme_url, headers=headers, timeout=10)
+        if r_res.status_code == 200:
+            import base64
+            readme_text = base64.b64decode(r_res.json().get("content", "")).decode("utf-8", errors="ignore")
+            code_snippets.append(f"=== README.md Overview ===\n{readme_text[:2000]}")
+    except Exception as e:
+        logger.warning(f"Could not fetch README for {repo_full_name}: {e}")
+
+    # 2. Fetch root directory file listing and read main code files
+    contents_url = f"https://api.github.com/repos/{repo_full_name}/contents"
+    try:
+        c_res = requests.get(contents_url, headers=headers, timeout=10)
+        if c_res.status_code == 200:
+            files = c_res.json()
+            main_files = [f for f in files if isinstance(f, dict) and f.get("type") == "file" and f.get("name") in (
+                "app.py", "main.py", "server.py", "index.js", "index.ts", "requirements.txt", "package.json", "Dockerfile", "Procfile"
+            )]
+            
+            for file_info in main_files[:4]:
+                file_url = file_info.get("download_url") or file_info.get("url")
+                if file_url:
+                    f_res = requests.get(file_url, headers=headers, timeout=10)
+                    if f_res.status_code == 200:
+                        file_text = f_res.text if hasattr(f_res, 'text') else str(f_res.content)
+                        fname = file_info.get("name")
+                        code_snippets.append(f"=== File: {fname} ===\n{file_text[:2000]}")
+    except Exception as e:
+        logger.warning(f"Could not inspect source files for {repo_full_name}: {e}")
+
+    if not code_snippets:
+        return f"Repository {repo_full_name} code inspection: Python / Flask / NVIDIA NIM Kimi-k3 / Unsplash API / LinkedIn REST API."
+        
+    return "\n\n".join(code_snippets)
 
 def generate_github_vlog_post(github_info: dict):
     """Generates a developer vlog / project update LinkedIn post based on GitHub activity."""
@@ -246,12 +302,22 @@ def generate_github_vlog_post(github_info: dict):
         "name": "linkedin_automation",
         "full_name": f"{username}/linkedin_automation",
         "description": "AI-powered automated content workflow & LinkedIn posting agent",
-        "language": "Python / Flask / LLM"
+        "language": "Python / Flask / LLM",
+        "dependencies": ["openai", "flask", "gunicorn", "requests"]
     }
     repo_name = primary_repo.get("name", "project")
     repo_full_name = primary_repo.get("full_name", f"{username}/{repo_name}")
     repo_desc = primary_repo.get("description") or "AI Automation & Developer Workflows"
     repo_lang = primary_repo.get("language") or "Python"
+    repo_deps = primary_repo.get("dependencies", [])
+
+    # Fetch deep source code and README snippets from GitHub API
+    github_headers = {"User-Agent": "LinkedInAutomationAgent"}
+    gh_token = os.getenv("GITHUB_TOKEN")
+    if gh_token:
+        github_headers["Authorization"] = f"token {gh_token}"
+        
+    code_context = extract_repo_code_context(username, repo_full_name, headers=github_headers)
 
     if has_commits:
         recent_commits = [c['message'] for c in commits if repo_name in c.get('repo', '')]
@@ -261,23 +327,34 @@ def generate_github_vlog_post(github_info: dict):
     else:
         commit_details = f"Recent updates to {repo_name}: Architecture enhancements, cloud deployment, and API integrations."
 
+    deps_str = ", ".join(repo_deps) if repo_deps else "Core frameworks and APIs"
+
     prompt = (
         f"You are a passionate software engineer writing a high-engagement, viral LinkedIn post showcasing your MOST RECENT project.\n\n"
         f"Developer GitHub: @{username}\n"
         f"Featured Project Name: {repo_full_name}\n"
         f"Primary Programming Language: {repo_lang}\n"
+        f"Detected Repository Dependencies: {deps_str}\n"
         f"Project Description: {repo_desc}\n"
         f"Latest Commit Messages / Code Progress:\n{commit_details}\n\n"
+        f"INSPECTED REPOSITORY SOURCE CODE & README SNIPPETS:\n"
+        f"{code_context[:4000]}\n\n"
         f"CRITICAL POST REQUIREMENTS:\n"
         f"1. SINGLE PROJECT FOCUS: Focus 100% on THIS ONE PROJECT ({repo_name}). Do NOT mention or hardcode unrelated external tools.\n"
         f"2. ATTENTION-GRABBING HOOK: Start with a powerful, compelling opening line about {repo_name}.\n"
-        f"3. DYNAMIC TECH STACK (NO HARDCODING): Dynamically infer the exact tech stack from the project name ({repo_name}), primary language ({repo_lang}), commits, and description. List the specific frameworks, libraries, APIs, and tools that belong to THIS SPECIFIC project (e.g., if TypeScript/Superset: React, TypeScript, Apache Superset, REST APIs; if Python/AI: Python, Flask, LLM APIs, REST Webhooks, Docker, Cloud Host). Include repo link: github.com/{repo_full_name}.\n"
-        f"4. DETAILED MULTI-STAGE ARCHITECTURE WORKFLOW: Construct a clean, detailed 4-6 step text/emoji/ASCII architecture diagram showing how data & components flow under the hood specifically for THIS project (e.g., Client/Trigger ➔ API Router ➔ Processing Engine ➔ External APIs / DB ➔ Cloud Deployment).\n"
+        f"3. DYNAMIC TECH STACK & AI MODELS DETECTED IN CODE: Carefully read the source code & README snippets above! Explicitly list the exact technologies, AI models, and APIs discovered inside the repository code:\n"
+        f"   • Core Language & Frameworks ({repo_lang}, Flask, Gunicorn, etc.)\n"
+        f"   • AI Model / Intelligence Engine (e.g. NVIDIA NIM Kimi-k3 API / LLM)\n"
+        f"   • Visual Image Engine (e.g. Unsplash REST API)\n"
+        f"   • Publishing & Webhooks (e.g. LinkedIn REST API, Gmail SMTP)\n"
+        f"   • Cloud & Deployment (e.g. Render, Docker, GitHub Actions)\n"
+        f"   • GitHub Repo Link: github.com/{repo_full_name}\n"
+        f"4. DETAILED MULTI-STAGE ARCHITECTURE WORKFLOW: Construct a clean, detailed 4-6 step text/emoji/ASCII architecture diagram showing how data & components flow under the hood specifically for THIS project (e.g., User/Trigger ➔ API Router ➔ AI Engine (Kimi-k3) ➔ Image API (Unsplash) ➔ Approval Webhook ➔ LinkedIn REST API ➔ Cloud Host).\n"
         f"5. PRACTICAL REAL-WORLD USES: Explain 2-3 concrete benefits / real-world use cases of why someone would use or build this project.\n"
         f"6. COMMUNITY RECOMMENDATIONS & FEEDBACK: Explicitly ask the LinkedIn developer community for their recommendations, feedback, or suggestions for improvement to drive comments & likes (e.g., '💡 What features would you add next? How would you optimize this architecture? Drop your recommendations below! 👇').\n"
-        f"7. HASHTAGS & FOOTER: Clean formatting, emojis, and hashtags (#BuildInPublic #SoftwareEngineering #{repo_lang.replace(' ', '').replace('/', '')} #TechCommunity).\n"
+        f"7. HASHTAGS & FOOTER: Clean formatting, emojis, and hashtags (#BuildInPublic #SoftwareEngineering #AI #{repo_lang.replace(' ', '').replace('/', '')} #TechCommunity).\n"
         f"8. Add a brief note near the end: '🤖 Auto-generated Dev Log | #AI #LinkedInAutomation'.\n"
-        f"9. At the very end of your response, add a line formatted exactly like 'KEYWORD: <single_word_search_term>' for image search. If no image is appropriate for this specific project, put 'KEYWORD: NONE'.\n"
+        f"9. At the very end of your response, add a line formatted exactly like 'KEYWORD: <search_term>' for image search. If no image is appropriate or if image should be skipped, put 'KEYWORD: NONE'.\n"
     )
 
     model_name = os.getenv("NVIDIA_MODEL", "moonshotai/kimi-k3")
@@ -302,13 +379,23 @@ def generate_github_vlog_post(github_info: dict):
 
 def fetch_online_image(keyword: str, output_filepath="temp_image.jpg"):
     """Fetches a free high-resolution image from Unsplash based on keyword. Returns None if fetch fails or no relevant image."""
-    if not keyword or keyword.lower() in ("none", "null", "noimage"):
-        logger.info("No valid image keyword provided. Skipping image download.")
+    if not keyword or keyword.lower() in ("none", "null", "noimage", "skip"):
+        logger.info("No valid image keyword provided or image skipped. Returning clean text-only post.")
         return None
         
-    logger.info(f"Fetching online image from Unsplash for keyword: '{keyword}'")
+    # Refine tech queries so Unsplash doesn't return unrelated objects (like buses or cars!)
+    tech_queries = {
+        "coding": "software developer dark workspace",
+        "python": "python code monitor screen",
+        "automation": "software architecture code display",
+        "ai": "artificial intelligence computer code",
+        "linkedin_automation": "software code dark workspace"
+    }
+    search_term = tech_queries.get(keyword.lower(), f"{keyword} software code monitor")
+
+    logger.info(f"Fetching online image from Unsplash for term: '{search_term}' (original keyword: '{keyword}')")
     try:
-        url = f"https://api.unsplash.com/photos/random?query={keyword}&client_id={UNSPLASH_ACCESS_KEY}"
+        url = f"https://api.unsplash.com/photos/random?query={requests.utils.quote(search_term)}&client_id={UNSPLASH_ACCESS_KEY}"
         res = requests.get(url, timeout=15)
         if res.status_code == 200:
             img_url = res.json()["urls"]["regular"]
@@ -318,10 +405,10 @@ def fetch_online_image(keyword: str, output_filepath="temp_image.jpg"):
             logger.info(f"Image downloaded successfully to {output_filepath}")
             return output_filepath
         else:
-            logger.warning(f"Unsplash API returned {res.status_code}. Skipping image attachment.")
+            logger.warning(f"Unsplash API returned {res.status_code}. Proceeding with clean text-only post.")
             return None
     except Exception as e:
-        logger.warning(f"Failed to fetch online image from Unsplash ({e}). Proceeding without image.")
+        logger.warning(f"Failed to fetch online image from Unsplash ({e}). Proceeding with clean text-only post.")
         return None
 
 def send_approval_email(post_id: str, post_text: str, image_path: str = None, base_url: str = None):

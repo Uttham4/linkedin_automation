@@ -1,97 +1,137 @@
-# LinkedIn Automated Email Approval & Publishing System
+# 🤖 Cloud-Hosted LinkedIn Automation & GitHub Dev Vlog Agent
 
-An automated LinkedIn content generation and interactive email approval workflow system powered by NVIDIA LLM, Unsplash image search, SMTP email with inline preview, and LinkedIn REST API.
+An autonomous, cloud-ready LinkedIn content generation & developer vlog workflow powered by **NVIDIA NIM AI (Kimi-k3 model)**, **Unsplash REST API**, **GitHub API Deep Code Inspection**, **Flask + Gunicorn**, and **LinkedIn REST API v2**.
 
 ---
 
-## System Flow Architecture
+## 🏗️ System Architecture & Workflow
 
+```text
+┌─────────────────────────┐      ┌───────────────────────────┐      ┌───────────────────────────────┐
+│ GitHub Actions / Cron   │ ───> │ Render Cloud Microservice │ ───> │ GitHub API Code & README      │
+│  (Daily Auto-Schedule)  │      │   (Flask / Gunicorn)      │      │ Deep Repository Inspection    │
+└─────────────────────────┘      └─────────────┬─────────────┘      └───────────────┬───────────────┘
+                                               │                                    │
+                                               │                                    ▼
+                                               │                        ┌──────────────────────┐
+                                               ├──────────────────────> │ NVIDIA NIM API       │
+                                               │                        │ (Moonshot Kimi-k3)   │
+                                               │                        └──────────┬───────────┘
+                                               │                                   │
+                                               │                                   ▼
+                                               │                        ┌──────────────────────┐
+                                               │                        │ Unsplash REST API    │
+                                               │                        │ (Refined Tech Search)│
+                                               │                        └──────────┬───────────┘
+                                               │                                   │
+                                               ▼                                   ▼
+                                  ┌─────────────────────────────┐      ┌──────────────────────┐
+                                  │ 1-Tap Post Approval URL     │ ───> │ LinkedIn REST API v2 │
+                                  │ (Async Non-Blocking Email)  │      │ (Text or Media Post) │
+                                  └─────────────────────────────┘      └──────────────────────┘
 ```
-┌──────────────────┐
-│ NVIDIA API (LLM) │ ──> Generates Post Text + Image Keyword (e.g., "artificial intelligence")
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│  Unsplash API    │ ──> Searches online & downloads target image binary
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ Email SMTP Server│ ──> Sends email with post draft, image preview, & [Approve] link
-└────────┬─────────┘
-         │  (User receives email & clicks "Approve")
-         ▼
-┌──────────────────┐     ┌─────────────────────┐     ┌───────────────────────┐
-│ Approval Webhook │ ──> │ Upload Image to     │ ──> │ Publish to LinkedIn   │
-│  (Flask Server)  │     │ LinkedIn Asset API  │     │ (`/rest/posts`)       │
-└──────────────────┘     └─────────────────────┘     └───────────────────────┘
+
+---
+
+## 🚀 Key Features & Stack
+
+- **🧠 Deep Code & Model Intelligence**:
+  - Automatically fetches commit history, `README.md`, and source code (`app.py`, `package.json`, `Dockerfile`) directly via GitHub API.
+  - Dynamically extracts and details the exact **AI Models** (`moonshotai/kimi-k3`), **APIs**, and **tech stack** without hardcoding.
+- **🖼️ Smart Visual & Text-Only Fallback**:
+  - Converts keywords into curated software developer search terms (`software developer dark workspace`) to prevent unrelated images.
+  - Automatically falls back to clean, professional **text-only LinkedIn posts** if images are skipped or unavailable.
+- **⚡ Asynchronous Cloud Microservice**:
+  - Hosted on **Render.com** with **Gunicorn** and non-blocking background threads for SMTP notifications to guarantee sub-second HTTP response times without worker timeouts.
+- **🔐 Stateless Security & Persistent Storage**:
+  - Uses signed JSON tokens and `API_SECRET` headers to prevent unauthorized post triggers.
+- **⏰ Autonomous Daily Execution**:
+  - Integrated with **GitHub Actions** (`.github/workflows/daily_post.yml`) to generate dev logs automatically every day.
+
+---
+
+## 🛠️ Technologies Used
+
+| Category | Technology / API |
+| :--- | :--- |
+| **Core Engine** | Python 3.14 / Flask / Gunicorn |
+| **AI Post Generation** | NVIDIA NIM API (`moonshotai/kimi-k3`) |
+| **Visual Media** | Unsplash REST API (`api.unsplash.com`) |
+| **Publishing Platform** | LinkedIn REST API v2 (`/rest/posts` & `/rest/images`) |
+| **Code Inspection** | GitHub REST API v3 |
+| **Container & Cloud** | Render.com / Docker / GitHub Actions |
+
+---
+
+## 🔑 Environment Variables Setup
+
+Create a `.env` file in the root directory:
+
+```env
+# NVIDIA NIM AI Configuration
+NVIDIA_API_KEY=nvapi-your-key-here
+NVIDIA_MODEL=moonshotai/kimi-k3
+
+# Unsplash Image API
+UNSPLASH_ACCESS_KEY=your-unsplash-access-key
+
+# LinkedIn OAuth API Credentials
+LINKEDIN_ACCESS_TOKEN=your-linkedin-access-token
+AUTHOR_URN=urn:li:person:YOUR_LINKEDIN_MEMBER_ID
+
+# Gmail SMTP Email Notification (App Password)
+SENDER_EMAIL=your-email@gmail.com
+SENDER_PASSWORD=your-gmail-app-password
+RECIPIENT_EMAIL=recipient-email@gmail.com
+
+# GitHub API & Remote Server Config
+GITHUB_USERNAME=Uttham4
+GITHUB_TOKEN=ghp_your_github_personal_access_token
+SERVER_BASE_URL=https://linkedin-automation-xav0.onrender.com
+API_SECRET=your-secure-random-api-secret
 ```
 
 ---
 
-## 1. Prerequisites & API Credentials
+## 🌐 API Endpoints
 
-1. **NVIDIA API Key**: Obtain a key from [NVIDIA Integrated APIs](https://build.nvidia.com/).
-2. **Unsplash Access Key**: Obtain a free Access Key from [Unsplash Developers](https://unsplash.com/developers).
-3. **LinkedIn OAuth Access Token & Member URN**:
-   - Access token with `w_member_social` permission scope.
-   - Author URN (e.g., `urn:li:person:YOUR_MEMBER_ID`).
-4. **Gmail App Password**:
-   - Enable 2-Factor Authentication on your Google Account.
-   - Generate an **App Password** under Account Security -> App Passwords.
-
----
-
-## 2. Installation
-
-1. Install required Python packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. Configure environment variables in `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-   Open `.env` and populate your credentials.
-
----
-
-## 3. Running the Server
-
-1. Start the Flask application:
-   ```bash
-   python app.py
-   ```
-
-2. Expose your server via `ngrok` (so email links work outside localhost):
-   ```bash
-   ngrok http 5000
-   ```
-
-3. Update `SERVER_BASE_URL` in `.env` with your public ngrok URL:
-   ```env
-   SERVER_BASE_URL=https://xxxx.ngrok-free.app
-   ```
-
----
-
-## 4. Triggering Post Generation
-
-Send a `POST` request to trigger the automation flow:
-
+### 1. Trigger GitHub Developer Vlog
+Analyzes recent commits and repository code to generate a project update post:
 ```bash
-curl -X POST http://localhost:5000/trigger-generation \
+curl -X POST https://linkedin-automation-xav0.onrender.com/trigger-github \
   -H "Content-Type: application/json" \
-  -d '{"topic": "Scalable Cloud Architecture"}'
+  -H "X-API-Secret: your-secure-random-api-secret" \
+  -d '{"force_latest": true}'
+```
+
+### 2. Trigger Custom Topic Post
+Generates a post on any custom technical topic:
+```bash
+curl -X POST https://linkedin-automation-xav0.onrender.com/trigger-generation \
+  -H "Content-Type: application/json" \
+  -H "X-API-Secret: your-secure-random-api-secret" \
+  -d '{"topic": "Autonomous AI Agents & Cloud Microservices"}'
+```
+
+### 3. Approve & Publish Post
+Publishes the pending post draft to LinkedIn:
+```text
+GET https://linkedin-automation-xav0.onrender.com/approve?post_id=<POST_ID>
 ```
 
 ---
 
-## 5. Email Review & Approval
+## ☁️ Cloud Deployment (Render / Docker)
 
-1. Check your email inbox for the subject **"LinkedIn Post Draft: Approval Required"**.
-2. Review the generated copy and inline Unsplash image preview.
-3. Click **✓ Approve & Publish to LinkedIn**.
-4. The system uploads the binary image to LinkedIn and publishes the post.
+1. Connect your GitHub repository to **Render.com**.
+2. Select **Web Service** with runtime **Docker** or **Python 3**.
+3. Add environment variables in the Render Dashboard.
+4. Deployment builds automatically using `Procfile` and `render.yaml`.
+
+---
+
+## 🤝 Contributing
+
+Contributions, feedback, and pull requests are welcome! Feel free to star ⭐ the repository.
+
+*🤖 Auto-generated Dev Log System | Built with Python, NVIDIA NIM, and Cloud Microservices.*
