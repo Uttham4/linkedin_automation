@@ -264,20 +264,20 @@ def generate_github_vlog_post(github_info: dict):
     prompt = (
         f"You are a passionate software engineer writing a high-engagement, viral LinkedIn post showcasing your MOST RECENT project.\n\n"
         f"Developer GitHub: @{username}\n"
-        f"Featured Project: {repo_full_name}\n"
-        f"Tech Stack: {repo_lang}\n"
-        f"Description: {repo_desc}\n"
-        f"Latest Updates:\n{commit_details}\n\n"
+        f"Featured Project Name: {repo_full_name}\n"
+        f"Primary Programming Language: {repo_lang}\n"
+        f"Project Description: {repo_desc}\n"
+        f"Latest Commit Messages / Code Progress:\n{commit_details}\n\n"
         f"CRITICAL POST REQUIREMENTS:\n"
-        f"1. FOCUS ON ONLY THIS ONE PROJECT ({repo_name}). Do NOT mention or list other unrelated projects.\n"
-        f"2. ATTENTION-GRABBING HOOK: Start with a catchy opening line that grabs attention instantly.\n"
-        f"3. TECH STACK & TOOLS: Clearly list the key technologies, APIs, frameworks, and tools used.\n"
-        f"4. CATCHY VISUAL ARCHITECTURE / WORKFLOW: Include a clean 3-4 line text/emoji/ASCII workflow diagram showing how the system operates under the hood (e.g., Trigger ➔ Processing ➔ Output).\n"
-        f"5. PRACTICAL REAL-WORLD USES: Explain 2-3 concrete benefits / use cases of this project.\n"
-        f"6. COMMUNITY RECOMMENDATIONS & FEEDBACK: Explicitly ask the LinkedIn audience/developers for their recommendations, feedback, or suggestions for improvement to drive comments & likes (e.g., '💡 What features would you add next? How would you optimize this workflow? Drop your thoughts below! 👇').\n"
-        f"7. Hashes & Footer: Add clean formatting, emojis, and hashtags (#BuildInPublic #SoftwareEngineering #Coding #{repo_lang.replace(' ', '').replace('/', '')} #TechCommunity).\n"
+        f"1. SINGLE PROJECT FOCUS: Focus 100% on THIS ONE PROJECT ({repo_name}). Do NOT mention or hardcode unrelated external tools.\n"
+        f"2. ATTENTION-GRABBING HOOK: Start with a powerful, compelling opening line about {repo_name}.\n"
+        f"3. DYNAMIC TECH STACK (NO HARDCODING): Dynamically infer the exact tech stack from the project name ({repo_name}), primary language ({repo_lang}), commits, and description. List the specific frameworks, libraries, APIs, and tools that belong to THIS SPECIFIC project (e.g., if TypeScript/Superset: React, TypeScript, Apache Superset, REST APIs; if Python/AI: Python, Flask, LLM APIs, REST Webhooks, Docker, Cloud Host). Include repo link: github.com/{repo_full_name}.\n"
+        f"4. DETAILED MULTI-STAGE ARCHITECTURE WORKFLOW: Construct a clean, detailed 4-6 step text/emoji/ASCII architecture diagram showing how data & components flow under the hood specifically for THIS project (e.g., Client/Trigger ➔ API Router ➔ Processing Engine ➔ External APIs / DB ➔ Cloud Deployment).\n"
+        f"5. PRACTICAL REAL-WORLD USES: Explain 2-3 concrete benefits / real-world use cases of why someone would use or build this project.\n"
+        f"6. COMMUNITY RECOMMENDATIONS & FEEDBACK: Explicitly ask the LinkedIn developer community for their recommendations, feedback, or suggestions for improvement to drive comments & likes (e.g., '💡 What features would you add next? How would you optimize this architecture? Drop your recommendations below! 👇').\n"
+        f"7. HASHTAGS & FOOTER: Clean formatting, emojis, and hashtags (#BuildInPublic #SoftwareEngineering #{repo_lang.replace(' ', '').replace('/', '')} #TechCommunity).\n"
         f"8. Add a brief note near the end: '🤖 Auto-generated Dev Log | #AI #LinkedInAutomation'.\n"
-        f"9. At the very end of your response, add a line formatted exactly like 'KEYWORD: <single_word_search_term>' for Unsplash image search.\n"
+        f"9. At the very end of your response, add a line formatted exactly like 'KEYWORD: <single_word_search_term>' for image search. If no image is appropriate for this specific project, put 'KEYWORD: NONE'.\n"
     )
 
     model_name = os.getenv("NVIDIA_MODEL", "moonshotai/kimi-k3")
@@ -301,32 +301,43 @@ def generate_github_vlog_post(github_info: dict):
     return text, keyword
 
 def fetch_online_image(keyword: str, output_filepath="temp_image.jpg"):
-    """Fetches a free high-resolution image from Unsplash based on keyword."""
+    """Fetches a free high-resolution image from Unsplash based on keyword. Returns None if fetch fails or no relevant image."""
+    if not keyword or keyword.lower() in ("none", "null", "noimage"):
+        logger.info("No valid image keyword provided. Skipping image download.")
+        return None
+        
     logger.info(f"Fetching online image from Unsplash for keyword: '{keyword}'")
-    url = f"https://api.unsplash.com/photos/random?query={keyword}&client_id={UNSPLASH_ACCESS_KEY}"
-    res = requests.get(url, timeout=15)
-    if res.status_code == 200:
-        img_url = res.json()["urls"]["regular"]
-        img_data = requests.get(img_url, timeout=30).content
-        with open(output_filepath, "wb") as f:
-            f.write(img_data)
-        logger.info(f"Image downloaded successfully to {output_filepath}")
-        return output_filepath
-    else:
-        logger.error(f"Unsplash API error ({res.status_code}): {res.text}")
-        raise Exception(f"Failed to fetch online image from Unsplash: {res.text}")
+    try:
+        url = f"https://api.unsplash.com/photos/random?query={keyword}&client_id={UNSPLASH_ACCESS_KEY}"
+        res = requests.get(url, timeout=15)
+        if res.status_code == 200:
+            img_url = res.json()["urls"]["regular"]
+            img_data = requests.get(img_url, timeout=30).content
+            with open(output_filepath, "wb") as f:
+                f.write(img_data)
+            logger.info(f"Image downloaded successfully to {output_filepath}")
+            return output_filepath
+        else:
+            logger.warning(f"Unsplash API returned {res.status_code}. Skipping image attachment.")
+            return None
+    except Exception as e:
+        logger.warning(f"Failed to fetch online image from Unsplash ({e}). Proceeding without image.")
+        return None
 
-def send_approval_email(post_id: str, post_text: str, image_path: str, base_url: str = None):
-    """Sends an email with an inline image preview and approval button link."""
+def send_approval_email(post_id: str, post_text: str, image_path: str = None, base_url: str = None):
+    """Sends an email with an inline image preview (if available) and approval button link."""
     logger.info(f"Sending approval email for post_id: {post_id}")
     effective_url = (base_url or get_base_url()).rstrip('/')
+    approve_url = f"{effective_url}/approve?post_id={post_id}"
 
     msg = MIMEMultipart("related")
     msg["Subject"] = "LinkedIn Post Draft: Approval Required"
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECIPIENT_EMAIL
 
-    approve_url = f"{effective_url}/approve?post_id={post_id}"
+    image_html = ""
+    if image_path and os.path.exists(image_path):
+        image_html = '<p><strong>Online Fetched Image Preview:</strong></p><p><img src="cid:post_image" style="max-width: 500px; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" /></p><br>'
 
     html_content = f"""
     <html>
@@ -336,9 +347,7 @@ def send_approval_email(post_id: str, post_text: str, image_path: str, base_url:
         <blockquote style="background: #f4f4f4; padding: 15px; border-left: 5px solid #0077b5; font-size: 14px; white-space: pre-wrap;">
           {post_text.replace('<', '&lt;').replace('>', '&gt;').replace('\n', '<br>')}
         </blockquote>
-        <p><strong>Online Fetched Image Preview:</strong></p>
-        <p><img src="cid:post_image" style="max-width: 500px; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" /></p>
-        <br>
+        {image_html}
         <a href="{approve_url}" 
            style="background-color: #0077b5; color: white; padding: 14px 28px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px;">
            ✓ Approve & Publish to LinkedIn
@@ -351,11 +360,11 @@ def send_approval_email(post_id: str, post_text: str, image_path: str, base_url:
     msg.attach(msg_alternative)
     msg_alternative.attach(MIMEText(html_content, "html"))
 
-    # Attach image inline
-    with open(image_path, "rb") as f:
-        img = MIMEImage(f.read())
-        img.add_header("Content-ID", "<post_image>")
-        msg.attach(img)
+    if image_path and os.path.exists(image_path):
+        with open(image_path, "rb") as f:
+            img = MIMEImage(f.read())
+            img.add_header("Content-ID", "<post_image>")
+            msg.attach(img)
 
     email_sent = False
     try:
@@ -380,7 +389,7 @@ def send_approval_email(post_id: str, post_text: str, image_path: str, base_url:
             logger.error(f"SMTP connection blocked or failed on cloud host: {e465}")
             email_sent = False
 
-def send_approval_email_async(post_id: str, post_text: str, image_path: str, base_url: str = None):
+def send_approval_email_async(post_id: str, post_text: str, image_path: str = None, base_url: str = None):
     """Fires background thread to send email without blocking the HTTP response."""
     def _send_worker():
         try:
@@ -391,8 +400,8 @@ def send_approval_email_async(post_id: str, post_text: str, image_path: str, bas
     thread = threading.Thread(target=_send_worker, daemon=True)
     thread.start()
 
-def publish_to_linkedin(text_content: str, image_path: str):
-    """3-step LinkedIn API image upload and publish routine."""
+def publish_to_linkedin(text_content: str, image_path: str = None):
+    """3-step LinkedIn API image upload and publish routine, with clean text-only fallback."""
     logger.info("Starting LinkedIn publication workflow...")
     linkedin_version = os.getenv("LINKEDIN_API_VERSION", "202608")
     headers = {
@@ -401,37 +410,38 @@ def publish_to_linkedin(text_content: str, image_path: str):
         "X-Restli-Protocol-Version": "2.0.0",
     }
     
-    # 1. Initialize image upload
-    init_url = "https://api.linkedin.com/rest/images?action=initializeUpload"
-    init_payload = {"initializeUploadRequest": {"owner": AUTHOR_URN}}
-    logger.info("Initializing image upload on LinkedIn...")
-    init_res = requests.post(init_url, headers=headers, json=init_payload, timeout=15)
-    
-    if init_res.status_code not in (200, 201):
-        logger.error(f"LinkedIn image initialization failed ({init_res.status_code}): {init_res.text}")
-        return False
-
-    init_data = init_res.json()["value"]
-    upload_url = init_data["uploadUrl"]
-    image_urn = init_data["image"]
-    logger.info(f"LinkedIn upload URL obtained. Image URN: {image_urn}")
-
-    # 2. Upload binary image file
-    with open(image_path, "rb") as f:
-        upload_res = requests.put(
-            upload_url,
-            headers={"Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN}"},
-            data=f,
-            timeout=60
-        )
-    
-    if upload_res.status_code not in (200, 201):
-        logger.error(f"LinkedIn binary upload failed ({upload_res.status_code}): {upload_res.text}")
-        return False
+    image_urn = None
+    if image_path and os.path.exists(image_path):
+        # 1. Initialize image upload
+        init_url = "https://api.linkedin.com/rest/images?action=initializeUpload"
+        init_payload = {"initializeUploadRequest": {"owner": AUTHOR_URN}}
+        logger.info("Initializing image upload on LinkedIn...")
+        init_res = requests.post(init_url, headers=headers, json=init_payload, timeout=15)
         
-    logger.info("Binary image uploaded to LinkedIn successfully.")
+        if init_res.status_code in (200, 201):
+            init_data = init_res.json()["value"]
+            upload_url = init_data["uploadUrl"]
+            image_urn = init_data["image"]
+            logger.info(f"LinkedIn upload URL obtained. Image URN: {image_urn}")
 
-    # 3. Publish post
+            # 2. Upload binary image file
+            with open(image_path, "rb") as f:
+                upload_res = requests.put(
+                    upload_url,
+                    headers={"Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN}"},
+                    data=f,
+                    timeout=60
+                )
+            if upload_res.status_code not in (200, 201):
+                logger.error(f"LinkedIn binary upload failed ({upload_res.status_code}): {upload_res.text}")
+                image_urn = None
+            else:
+                logger.info("Binary image uploaded to LinkedIn successfully.")
+        else:
+            logger.error(f"LinkedIn image initialization failed ({init_res.status_code}): {init_res.text}")
+            image_urn = None
+
+    # 3. Publish post (with media if image_urn exists, or clean text-only)
     post_url = "https://api.linkedin.com/rest/posts"
     post_payload = {
         "author": AUTHOR_URN,
@@ -442,11 +452,13 @@ def publish_to_linkedin(text_content: str, image_path: str):
             "targetEntities": [],
             "thirdPartyDistributionChannels": []
         },
-        "lifecycleState": "PUBLISHED",
-        "content": {"media": {"id": image_urn}}
+        "lifecycleState": "PUBLISHED"
     }
     
-    logger.info("Publishing post to LinkedIn...")
+    if image_urn:
+        post_payload["content"] = {"media": {"id": image_urn}}
+    
+    logger.info(f"Publishing post to LinkedIn (Has image media: {image_urn is not None})...")
     res = requests.post(post_url, headers=headers, json=post_payload, timeout=15)
     if res.status_code in (200, 201):
         logger.info("Post published to LinkedIn successfully!")
