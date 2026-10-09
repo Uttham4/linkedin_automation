@@ -247,22 +247,32 @@ def fetch_github_activity(username: str, token: str = None, force_latest: bool =
     }
 
 def extract_repo_code_context(username: str, repo_full_name: str, headers: dict = None) -> str:
-    """Reads the repository's README.md and primary source code files via GitHub API to extract actual models, APIs, and stack details."""
+    """Reads the repository's README.md (local or via GitHub API) and primary source code files to extract actual models, APIs, and stack details without hardcoding."""
     logger.info(f"Performing deep code & README inspection for repository: {repo_full_name}")
     code_snippets = []
     
-    # 1. Fetch README.md
-    readme_url = f"https://api.github.com/repos/{repo_full_name}/readme"
-    try:
-        r_res = requests.get(readme_url, headers=headers, timeout=10)
-        if r_res.status_code == 200:
-            import base64
-            readme_text = base64.b64decode(r_res.json().get("content", "")).decode("utf-8", errors="ignore")
-            code_snippets.append(f"=== README.md Overview ===\n{readme_text[:2000]}")
-    except Exception as e:
-        logger.warning(f"Could not fetch README for {repo_full_name}: {e}")
+    # 1. Check for local README.md first if analyzing current workspace
+    if os.path.exists("README.md"):
+        try:
+            with open("README.md", "r", encoding="utf-8", errors="ignore") as f:
+                readme_text = f.read()
+                code_snippets.append(f"=== README.md (Local Workspace) ===\n{readme_text[:3000]}")
+        except Exception as e:
+            logger.warning(f"Could not read local README.md: {e}")
 
-    # 2. Fetch root directory file listing and read main code files
+    # 2. Fetch README.md via GitHub API if not already added locally
+    if not code_snippets:
+        readme_url = f"https://api.github.com/repos/{repo_full_name}/readme"
+        try:
+            r_res = requests.get(readme_url, headers=headers, timeout=10)
+            if r_res.status_code == 200:
+                import base64
+                readme_text = base64.b64decode(r_res.json().get("content", "")).decode("utf-8", errors="ignore")
+                code_snippets.append(f"=== README.md (GitHub API) ===\n{readme_text[:3000]}")
+        except Exception as e:
+            logger.warning(f"Could not fetch remote README for {repo_full_name}: {e}")
+
+    # 3. Fetch root directory file listing and read main code files via GitHub API
     contents_url = f"https://api.github.com/repos/{repo_full_name}/contents"
     try:
         c_res = requests.get(contents_url, headers=headers, timeout=10)
@@ -284,7 +294,7 @@ def extract_repo_code_context(username: str, repo_full_name: str, headers: dict 
         logger.warning(f"Could not inspect source files for {repo_full_name}: {e}")
 
     if not code_snippets:
-        return f"Repository {repo_full_name} code inspection: Python / Flask / NVIDIA NIM Kimi-k3 / Unsplash API / LinkedIn REST API."
+        return f"Repository {repo_full_name}: Extract tech stack, APIs, models, and architecture directly from available codebase."
         
     return "\n\n".join(code_snippets)
 
@@ -297,21 +307,21 @@ def generate_github_vlog_post(github_info: dict):
 
     logger.info(f"Generating GitHub vlog post for {username}. Has commits today: {has_commits}")
 
-    # Focus exclusively on the SINGLE most recent project
+    # Focus exclusively on the SINGLE most recent project (No hardcoded stack values)
     primary_repo = repos[0] if repos else {
         "name": "linkedin_automation",
         "full_name": f"{username}/linkedin_automation",
-        "description": "AI-powered automated content workflow & LinkedIn posting agent",
-        "language": "Python / Flask / LLM",
-        "dependencies": ["openai", "flask", "gunicorn", "requests"]
+        "description": "Automated content workflow & LinkedIn posting agent",
+        "language": "Code",
+        "dependencies": []
     }
     repo_name = primary_repo.get("name", "project")
     repo_full_name = primary_repo.get("full_name", f"{username}/{repo_name}")
-    repo_desc = primary_repo.get("description") or "AI Automation & Developer Workflows"
-    repo_lang = primary_repo.get("language") or "Python"
+    repo_desc = primary_repo.get("description") or "Developer Workflows & Open Source Code"
+    repo_lang = primary_repo.get("language") or "Code"
     repo_deps = primary_repo.get("dependencies", [])
 
-    # Fetch deep source code and README snippets from GitHub API
+    # Fetch deep source code and README content
     github_headers = {"User-Agent": "LinkedInAutomationAgent"}
     gh_token = os.getenv("GITHUB_TOKEN")
     if gh_token:
@@ -327,32 +337,26 @@ def generate_github_vlog_post(github_info: dict):
     else:
         commit_details = f"Recent updates to {repo_name}: Architecture enhancements, cloud deployment, and API integrations."
 
-    deps_str = ", ".join(repo_deps) if repo_deps else "Core frameworks and APIs"
+    deps_str = ", ".join(repo_deps) if repo_deps else "Derived from README and codebase"
 
     prompt = (
         f"You are a passionate software engineer writing a high-engagement, viral LinkedIn post showcasing your MOST RECENT project.\n\n"
         f"Developer GitHub: @{username}\n"
         f"Featured Project Name: {repo_full_name}\n"
         f"Primary Programming Language: {repo_lang}\n"
-        f"Detected Repository Dependencies: {deps_str}\n"
+        f"Detected Dependencies: {deps_str}\n"
         f"Project Description: {repo_desc}\n"
         f"Latest Commit Messages / Code Progress:\n{commit_details}\n\n"
-        f"INSPECTED REPOSITORY SOURCE CODE & README SNIPPETS:\n"
-        f"{code_context[:4000]}\n\n"
+        f"INSPECTED REPOSITORY README.MD & CODEBASE CONTEXT:\n"
+        f"{code_context[:4500]}\n\n"
         f"CRITICAL POST REQUIREMENTS:\n"
         f"1. SINGLE PROJECT FOCUS: Focus 100% on THIS ONE PROJECT ({repo_name}). Do NOT mention or hardcode unrelated external tools.\n"
         f"2. ATTENTION-GRABBING HOOK: Start with a powerful, compelling opening line about {repo_name}.\n"
-        f"3. DYNAMIC TECH STACK & AI MODELS DETECTED IN CODE: Carefully read the source code & README snippets above! Explicitly list the exact technologies, AI models, and APIs discovered inside the repository code:\n"
-        f"   • Core Language & Frameworks ({repo_lang}, Flask, Gunicorn, etc.)\n"
-        f"   • AI Model / Intelligence Engine (e.g. NVIDIA NIM Kimi-k3 API / LLM)\n"
-        f"   • Visual Image Engine (e.g. Unsplash REST API)\n"
-        f"   • Publishing & Webhooks (e.g. LinkedIn REST API, Gmail SMTP)\n"
-        f"   • Cloud & Deployment (e.g. Render, Docker, GitHub Actions)\n"
-        f"   • GitHub Repo Link: github.com/{repo_full_name}\n"
-        f"4. DETAILED MULTI-STAGE ARCHITECTURE WORKFLOW: Construct a clean, detailed 4-6 step text/emoji/ASCII architecture diagram showing how data & components flow under the hood specifically for THIS project (e.g., User/Trigger ➔ API Router ➔ AI Engine (Kimi-k3) ➔ Image API (Unsplash) ➔ Approval Webhook ➔ LinkedIn REST API ➔ Cloud Host).\n"
+        f"3. DYNAMIC TECH STACK & AI MODELS DERIVED EXCLUSIVELY FROM README & CODE: Carefully read the README.md and source code provided above! Extract and list the exact Tech Stack, Frameworks, AI Models, APIs, and Tools defined in the README.md and codebase. Do NOT invent or hardcode external technologies not present in the README/codebase. Include link: github.com/{repo_full_name}.\n"
+        f"4. DETAILED ARCHITECTURE WORKFLOW FROM README: Construct a clean 4-6 step text/emoji/ASCII architecture diagram based on the actual components and workflow described in the README.md and codebase.\n"
         f"5. PRACTICAL REAL-WORLD USES: Explain 2-3 concrete benefits / real-world use cases of why someone would use or build this project.\n"
         f"6. COMMUNITY RECOMMENDATIONS & FEEDBACK: Explicitly ask the LinkedIn developer community for their recommendations, feedback, or suggestions for improvement to drive comments & likes (e.g., '💡 What features would you add next? How would you optimize this architecture? Drop your recommendations below! 👇').\n"
-        f"7. HASHTAGS & FOOTER: Clean formatting, emojis, and hashtags (#BuildInPublic #SoftwareEngineering #AI #{repo_lang.replace(' ', '').replace('/', '')} #TechCommunity).\n"
+        f"7. HASHTAGS & FOOTER: Clean formatting, emojis, and hashtags (#BuildInPublic #SoftwareEngineering #TechCommunity).\n"
         f"8. Add a brief note near the end: '🤖 Auto-generated Dev Log | #AI #LinkedInAutomation'.\n"
         f"9. At the very end of your response, add a line formatted exactly like 'KEYWORD: <search_term>' for image search. If no image is appropriate or if image should be skipped, put 'KEYWORD: NONE'.\n"
     )
