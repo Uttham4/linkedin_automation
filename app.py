@@ -95,10 +95,17 @@ def generate_post_and_keyword(topic: str):
     """Generates LinkedIn post copy and a single keyword for fetching an online image."""
     logger.info(f"Generating post copy for topic: {topic}")
     prompt = (
-        f"Write an engaging LinkedIn post about '{topic}'. "
-        f"Include a brief note or hashtag line near the end mentioning that this is an automated/AI-assisted post (e.g., '🤖 Auto-generated post | #AI #Automation'). "
-        f"At the very end of your response, add a line formatted exactly like 'KEYWORD: <single_word_search_term>' "
-        f"representing the visual concept of the post."
+        f"You are a top tech thought leader writing a high-value, viral LinkedIn post about '{topic}'.\n\n"
+        f"POST STRUCTURE REQUIREMENTS:\n"
+        f"1. VIRAL HOOK: Start with a powerful, attention-grabbing opening line about '{topic}'.\n"
+        f"2. CORE INSIGHT: Explain what '{topic}' is, why it's trending, and why every developer/tech professional needs to care.\n"
+        f"3. OPEN SOURCE TOOLS & FRAMEWORKS: Mention 2-3 popular open-source repositories, libraries, or tools related to '{topic}' (e.g., if AI agents: LangChain, AutoGen, CrewAI; if Cloud: Docker, Kubernetes, Terraform).\n"
+        f"4. CATCHY VISUAL ASCII WORKFLOW: Include a 3-4 line text/emoji/ASCII architecture diagram explaining how this concept works step-by-step.\n"
+        f"5. KEY TAKEAWAYS: Provide 3 punchy, actionable bullet points ('Key Things to Know').\n"
+        f"6. COMMUNITY ENGAGEMENT PROMPT: End by asking the audience for their recommendations, favorite tools, or thoughts to drive comments and likes (e.g., '💡 What's your go-to open-source tool for this? What would you add? Drop your recommendations below! 👇').\n"
+        f"7. Hashes & Footer: Clean formatting, emojis, and hashtags (#TechTrends #{topic.replace(' ', '')} #BuildInPublic #OpenSource #SoftwareEngineering).\n"
+        f"8. Add a brief note near the end: '🤖 Auto-generated Tech Post | #AI #LinkedInAutomation'.\n"
+        f"9. At the very end of your response, add a line formatted exactly like 'KEYWORD: <single_word_search_term>' for Unsplash image search.\n"
     )
     
     model_name = os.getenv("NVIDIA_MODEL", "moonshotai/kimi-k3")
@@ -106,7 +113,7 @@ def generate_post_and_keyword(topic: str):
         model=model_name,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
-        max_tokens=600
+        max_tokens=800
     )
     
     output = response.choices[0].message.content
@@ -234,43 +241,51 @@ def generate_github_vlog_post(github_info: dict):
 
     logger.info(f"Generating GitHub vlog post for {username}. Has commits today: {has_commits}")
 
-    if has_commits:
-        commit_summary = "\n".join([f"- Repo: {c['repo']} | Commit: {c['message']}" for c in commits[:8]])
-        repos_summary = "\n".join([f"- {r['full_name']} ({r['language']}): {r['description']}" for r in repos])
+    # Focus exclusively on the SINGLE most recent project
+    primary_repo = repos[0] if repos else {
+        "name": "linkedin_automation",
+        "full_name": f"{username}/linkedin_automation",
+        "description": "AI-powered automated content workflow & LinkedIn posting agent",
+        "language": "Python / Flask / LLM"
+    }
+    repo_name = primary_repo.get("name", "project")
+    repo_full_name = primary_repo.get("full_name", f"{username}/{repo_name}")
+    repo_desc = primary_repo.get("description") or "AI Automation & Developer Workflows"
+    repo_lang = primary_repo.get("language") or "Python"
 
-        prompt = (
-            f"You are writing an authentic LinkedIn post as a software developer sharing a daily dev log / vlog update.\n\n"
-            f"Developer GitHub: @{username}\n"
-            f"Today's Commits & Code Progress:\n{commit_summary}\n\n"
-            f"Projects Worked On:\n{repos_summary}\n\n"
-            f"Requirements:\n"
-            f"1. Write an engaging, inspiring, and authentic developer log post for LinkedIn (150-250 words).\n"
-            f"2. Summarize what was built/improved today, technical highlights, and why it's exciting.\n"
-            f"3. Include relevant emojis, clean formatting, and tech hashtags (e.g. #BuildInPublic #SoftwareEngineering #Coding #GitHub).\n"
-            f"4. Add a brief note near the end: '🤖 Auto-generated Dev Log | #AI #LinkedInAutomation'.\n"
-            f"5. At the very end of your response, add a line formatted exactly like 'KEYWORD: <single_word_search_term>' "
-            f"representing the visual concept of the post (e.g., coding, server, python, devops).\n"
-        )
+    if has_commits:
+        recent_commits = [c['message'] for c in commits if repo_name in c.get('repo', '')]
+        if not recent_commits:
+            recent_commits = [c['message'] for c in commits[:4]]
+        commit_details = "\n".join([f"- {m}" for m in recent_commits[:5]])
     else:
-        repos_summary = "\n".join([f"- {r['full_name']} ({r['language']}): {r['description']}" for r in repos[:3]])
-        prompt = (
-            f"You are writing a LinkedIn post as a software developer doing a project showcase / tech reflection.\n\n"
-            f"Developer GitHub: @{username}\n"
-            f"Active Projects:\n{repos_summary}\n\n"
-            f"Requirements:\n"
-            f"1. Write a compelling developer post about ongoing software engineering work and continuous learning (150-200 words).\n"
-            f"2. Discuss architectural goals, building projects in public, and engineering best practices.\n"
-            f"3. Include hashtags (#BuildInPublic #SoftwareDevelopment #TechCommunity).\n"
-            f"4. Add a brief note near the end: '🤖 Auto-generated Dev Log | #AI #LinkedInAutomation'.\n"
-            f"5. End with 'KEYWORD: <single_word_search_term>' for image search.\n"
-        )
+        commit_details = f"Recent updates to {repo_name}: Architecture enhancements, cloud deployment, and API integrations."
+
+    prompt = (
+        f"You are a passionate software engineer writing a high-engagement, viral LinkedIn post showcasing your MOST RECENT project.\n\n"
+        f"Developer GitHub: @{username}\n"
+        f"Featured Project: {repo_full_name}\n"
+        f"Tech Stack: {repo_lang}\n"
+        f"Description: {repo_desc}\n"
+        f"Latest Updates:\n{commit_details}\n\n"
+        f"CRITICAL POST REQUIREMENTS:\n"
+        f"1. FOCUS ON ONLY THIS ONE PROJECT ({repo_name}). Do NOT mention or list other unrelated projects.\n"
+        f"2. ATTENTION-GRABBING HOOK: Start with a catchy opening line that grabs attention instantly.\n"
+        f"3. TECH STACK & TOOLS: Clearly list the key technologies, APIs, frameworks, and tools used.\n"
+        f"4. CATCHY VISUAL ARCHITECTURE / WORKFLOW: Include a clean 3-4 line text/emoji/ASCII workflow diagram showing how the system operates under the hood (e.g., Trigger ➔ Processing ➔ Output).\n"
+        f"5. PRACTICAL REAL-WORLD USES: Explain 2-3 concrete benefits / use cases of this project.\n"
+        f"6. COMMUNITY RECOMMENDATIONS & FEEDBACK: Explicitly ask the LinkedIn audience/developers for their recommendations, feedback, or suggestions for improvement to drive comments & likes (e.g., '💡 What features would you add next? How would you optimize this workflow? Drop your thoughts below! 👇').\n"
+        f"7. Hashes & Footer: Add clean formatting, emojis, and hashtags (#BuildInPublic #SoftwareEngineering #Coding #{repo_lang.replace(' ', '').replace('/', '')} #TechCommunity).\n"
+        f"8. Add a brief note near the end: '🤖 Auto-generated Dev Log | #AI #LinkedInAutomation'.\n"
+        f"9. At the very end of your response, add a line formatted exactly like 'KEYWORD: <single_word_search_term>' for Unsplash image search.\n"
+    )
 
     model_name = os.getenv("NVIDIA_MODEL", "moonshotai/kimi-k3")
     response = client.chat.completions.create(
         model=model_name,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.7,
-        max_tokens=700
+        max_tokens=750
     )
 
     output = response.choices[0].message.content
@@ -280,7 +295,7 @@ def generate_github_vlog_post(github_info: dict):
         keyword = parts[1].strip().split()[0]
     else:
         text = output.strip()
-        keyword = "coding"
+        keyword = repo_lang.split()[0] if repo_lang else "coding"
 
     logger.info(f"Generated GitHub Vlog Post Keyword: '{keyword}'")
     return text, keyword
