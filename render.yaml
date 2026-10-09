@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: linkedin-post-agent
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: LINKEDIN_ACCESS_TOKEN
+        sync: false
+      - key: AUTHOR_URN
+        sync: false
+      - key: SENDER_EMAIL
+        sync: false
+      - key: SENDER_PASSWORD
+        sync: false
+      - key: RECIPIENT_EMAIL
+        sync: false
+      - key: GITHUB_USERNAME
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: SERVER_BASE_URL
+        sync: false
+      - key: API_SECRET
+        sync: false
