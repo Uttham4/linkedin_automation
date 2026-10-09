@@ -341,21 +341,30 @@ def send_approval_email(post_id: str, post_text: str, image_path: str, base_url:
         img.add_header("Content-ID", "<post_image>")
         msg.attach(img)
 
+    email_sent = False
     try:
-        logger.info("Connecting to Gmail SMTP via Port 587 (STARTTLS)...")
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+        logger.info("Attempting Gmail SMTP via Port 587 (STARTTLS)...")
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
             server.ehlo()
             server.starttls()
             server.ehlo()
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
         logger.info("Approval email sent successfully via Port 587.")
+        email_sent = True
     except Exception as e587:
         logger.warning(f"Port 587 connection failed ({e587}), trying Port 465 (SSL)...")
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
-            server.login(SENDER_EMAIL, SENDER_PASSWORD)
-            server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
-        logger.info("Approval email sent successfully via Port 465.")
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
+                server.login(SENDER_EMAIL, SENDER_PASSWORD)
+                server.sendmail(SENDER_EMAIL, RECIPIENT_EMAIL, msg.as_string())
+            logger.info("Approval email sent successfully via Port 465.")
+            email_sent = True
+        except Exception as e465:
+            logger.error(f"SMTP connection blocked or failed on cloud host: {e465}")
+            email_sent = False
+
+    return email_sent, approve_url
 
 def publish_to_linkedin(text_content: str, image_path: str):
     """3-step LinkedIn API image upload and publish routine."""
@@ -456,13 +465,16 @@ def trigger_generation():
         PENDING_POSTS[post_id] = {"text": post_text, "image_path": image_path}
         save_pending_posts(PENDING_POSTS)
         
-        send_approval_email(post_id, post_text, image_path, base_url=get_base_url(request))
+        email_sent, approve_url = send_approval_email(post_id, post_text, image_path, base_url=get_base_url(request))
         
         return jsonify({
             "status": "success",
-            "message": "Topic post generated and approval email sent.",
+            "message": "Topic post generated successfully!",
             "post_id": post_id,
-            "keyword_used": keyword
+            "approve_url": approve_url,
+            "email_sent": email_sent,
+            "keyword_used": keyword,
+            "post_text": post_text
         }), 200
         
     except Exception as e:
@@ -493,15 +505,18 @@ def trigger_github():
         PENDING_POSTS[post_id] = {"text": post_text, "image_path": image_path}
         save_pending_posts(PENDING_POSTS)
 
-        send_approval_email(post_id, post_text, image_path, base_url=get_base_url(request))
+        email_sent, approve_url = send_approval_email(post_id, post_text, image_path, base_url=get_base_url(request))
 
         return jsonify({
             "status": "success",
-            "message": "GitHub commit vlog generated and approval email sent!",
+            "message": "GitHub commit vlog generated successfully!",
             "post_id": post_id,
+            "approve_url": approve_url,
+            "email_sent": email_sent,
             "has_commits_today": github_info["has_commits_today"],
             "commits_found": len(github_info["commits"]),
-            "keyword_used": keyword
+            "keyword_used": keyword,
+            "post_text": post_text
         }), 200
 
     except Exception as e:
