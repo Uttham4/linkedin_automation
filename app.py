@@ -515,6 +515,15 @@ def approve_post():
         logger.exception("Exception while publishing to LinkedIn")
         return f"<h3>Error during publishing: {str(e)}</h3>", 500
 
+@app.errorhandler(500)
+@app.errorhandler(Exception)
+def handle_internal_error(error):
+    logger.exception(f"Unhandled error encountered: {error}")
+    return jsonify({
+        "status": "error",
+        "message": str(error) or "Internal server error occurred on cloud host."
+    }), 500
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
