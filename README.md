@@ -1,6 +1,6 @@
-# 🤖 Cloud-Hosted LinkedIn Automation & GitHub Dev Vlog Agent
+# 🤖 Cloud-Hosted LinkedIn Automation, GitHub Dev Vlog & AI Comment Reply Agent
 
-An autonomous, cloud-ready LinkedIn content generation & developer vlog workflow powered by **NVIDIA NIM AI (Kimi-k3 model)**, **Unsplash REST API**, **GitHub API Deep Code Inspection**, **Flask + Gunicorn**, and **LinkedIn REST API v2**.
+An autonomous, cloud-ready LinkedIn content generation, developer vlog, and **AI-powered comment reply automation system** powered by **NVIDIA NIM AI (Kimi-k3 model)**, **Unsplash REST API**, **GitHub API Deep Code Inspection**, **Flask + Gunicorn**, and **LinkedIn REST API v2 (`socialActions` endpoints)**.
 
 ---
 
@@ -14,7 +14,7 @@ An autonomous, cloud-ready LinkedIn content generation & developer vlog workflow
                                                │                                    │
                                                │                                    ▼
                                                │                        ┌──────────────────────┐
-                                               ├──────────────────────> │ NVIDIA NIM API       │
+                                               │                        │ NVIDIA NIM API       │
                                                │                        │ (Moonshot Kimi-k3)   │
                                                │                        └──────────┬───────────┘
                                                │                                   │
@@ -24,54 +24,72 @@ An autonomous, cloud-ready LinkedIn content generation & developer vlog workflow
                                                │                        │ (Refined Tech Search)│
                                                │                        └──────────┬───────────┘
                                                │                                   │
+                                               │                                   ▼
                                                ▼                                   ▼
                                   ┌─────────────────────────────┐      ┌──────────────────────┐
                                   │ 1-Tap Post Approval URL     │ ───> │ LinkedIn REST API v2 │
                                   │ (Async Non-Blocking Email)  │      │ (Text or Media Post) │
-                                  └─────────────────────────────┘      └──────────────────────┘
+                                  └─────────────────────────────┘      └──────────┬───────────┘
+                                                                                  │
+                                                                                  ▼
+┌─────────────────────────┐      ┌───────────────────────────┐         ┌──────────────────────┐
+│ Background Poll Daemon  │ ───> │ SQLite WAL Persistent     │ <────── │ LinkedIn Comments    │
+│ (Multi-Worker Daemon)   │      │ Store (pending_comments)  │         │ /socialActions/      │
+└─────────────────────────┘      └─────────────┬─────────────┘         └──────────────────────┘
+                                               │
+                                               ▼
+                                 ┌───────────────────────────┐
+                                 │ LLM Reply Generator       │
+                                 │ (Injection & Spam Filter) │
+                                 └─────────────┬─────────────┘
+                                               │
+                                               ▼
+                                 ┌───────────────────────────┐
+                                 │ Dual Mode Engine          │
+                                 │ (Approval / Automatic)    │
+                                 └───────────────────────────┘
 ```
 
 ---
 
 ## 🚀 Key Features & Stack
 
-- **🧠 Deep Code & Model Intelligence**:
-  - Automatically fetches commit history, `README.md`, and source code (`app.py`, `package.json`, `Dockerfile`) directly via GitHub API.
-  - Dynamically extracts and details the exact **AI Models** (`moonshotai/kimi-k3`), **APIs**, and **tech stack** without hardcoding.
-- **🖼️ Smart Visual & Text-Only Fallback**:
-  - Converts keywords into curated software developer search terms (`software developer dark workspace`) to prevent unrelated images.
-  - Automatically falls back to clean, professional **text-only LinkedIn posts** if images are skipped or unavailable.
+- **💬 AI-Powered LinkedIn Comment Reply Automation**:
+  - Automatically fetches comments on published LinkedIn posts using official LinkedIn REST APIs (`socialActions/{urn}/comments`).
+  - Generates warm, concise, professional, and contextual responses using LLM (`moonshotai/kimi-k3`).
+  - **Language Matching**: Automatically detects and responds in the exact same language as the commenter.
+- **🛡️ Multi-Layer Security & Prompt Injection Defense**:
+  - Input truncation and HTML entity escaping on comment text.
+  - Regex filtering for jailbreak directives (`ignore previous instructions`, `system override`, `dan mode`).
+  - Active detection for spam, crypto scams, and malicious links.
+  - Strict system prompt separation with `<untrusted_comment>` boundary tags to prevent persona hijack.
+- **⚙️ Dual Reply Modes & Global Safety Controls**:
+  - **Approval Mode (Default)**: Holds generated replies in `pending_approval` for human review before publishing.
+  - **Automatic Mode**: Automatically publishes replies for safe comments when enabled.
+  - **Global Kill Switch (`GLOBAL_AUTO_REPLY_DISABLED`)**: Emergency brake to instantly pause automatic publishing.
+  - **Rate Limiting Guardrails**: Configurable hourly (`MAX_REPLIES_PER_HOUR=10`) and daily caps (`MAX_REPLIES_PER_DAY=50`).
 - **⚡ Multi-Worker Concurrency & Transactional Persistence**:
-  - Powered by **SQLite WAL (Write-Ahead Logging)** mode with atomic check-and-claim patterns.
-  - Eliminates stale in-memory state and race conditions across multiple **Gunicorn** workers, guaranteeing that posts generated on one worker are immediately visible and claimable by another worker without double-publishing.
-- **🛡️ Indirect Prompt Injection Defense-in-Depth**:
-  - Isolates untrusted repository files, commit messages, and topics within strict XML delimiter tags (`<untrusted_code_context>`, `<untrusted_commits>`).
-  - Strict **System vs User role separation** explicitly mandating that untrusted context is passive data, never executable instructions.
-  - Regex-based heuristic sanitizer neutralizes jailbreak directives (`ignore previous instructions`, `system override`, `dan mode`) and escapes delimiter tags.
-  - Output guardrails validate generated posts against phishing redirects and leak markers.
-- **🔐 API Secret Protection & Asynchronous Delivery**:
-  - Uses `API_SECRET` headers for webhook security and background daemon threads for non-blocking SMTP notification delivery.
-- **⏰ Autonomous Daily Execution**:
-  - Integrated with **GitHub Actions** (`.github/workflows/daily_post.yml`) to generate dev logs automatically every day.
+  - Powered by **SQLite WAL (Write-Ahead Logging)** mode with atomic test-and-set UPDATE operations (`claim_pending_comment`).
+  - Ensures multi-worker Gunicorn safety without duplicate reply generation or double-publishing.
+- **🧠 Deep Code & Model Intelligence**:
+  - Automatically fetches commit history, `README.md`, and source code directly via GitHub API.
+  - Dynamically extracts tech stack details and AI models without hardcoding.
 
 ---
 
-## 🛠️ Technologies Used
+## 🔐 LinkedIn Developer Permissions & OAuth Scopes
 
-| Category | Technology / API |
-| :--- | :--- |
-| **Core Engine** | Python 3.14 / Flask / Gunicorn |
-| **Persistence** | SQLite3 (WAL Mode, Multi-Process Transactional Store) |
-| **AI Post Generation** | NVIDIA NIM API (`moonshotai/kimi-k3`) |
-| **AI Safety & Defense** | Role Separation, XML Boundary Delimiters, Regex Injection Filters |
-| **Visual Media** | Unsplash REST API (`api.unsplash.com`) |
-| **Publishing Platform** | LinkedIn REST API v2 (`/rest/posts` & `/rest/images`) |
-| **Code Inspection** | GitHub REST API v3 |
-| **Container & Cloud** | Render.com / Docker / GitHub Actions |
+To retrieve comments and post replies, your LinkedIn OAuth 2.0 Access Token requires the following official permission scopes:
+
+| Feature | Required LinkedIn OAuth Scope | API Endpoint |
+| :--- | :--- | :--- |
+| **Publish LinkedIn Posts** | `w_member_social` or `w_organization_social` | `POST /rest/posts` |
+| **Fetch Post Comments** | `r_member_social` or `r_social_actions` | `GET /rest/socialActions/{urn}/comments` |
+| **Publish Comment Replies** | `w_member_social` or `w_social_actions` | `POST /rest/socialActions/{urn}/comments` |
 
 ---
 
-## 🔑 Environment Variables Setup
+## 🛠️ Environment Variables Setup
 
 Create a `.env` file in the root directory:
 
@@ -83,7 +101,7 @@ NVIDIA_MODEL=moonshotai/kimi-k3
 # Unsplash Image API
 UNSPLASH_ACCESS_KEY=your-unsplash-access-key
 
-# LinkedIn OAuth API Credentials
+# LinkedIn OAuth API Credentials & Scopes (r_member_social, w_member_social)
 LINKEDIN_ACCESS_TOKEN=your-linkedin-access-token
 AUTHOR_URN=urn:li:person:YOUR_LINKEDIN_MEMBER_ID
 
@@ -92,11 +110,18 @@ SENDER_EMAIL=your-email@gmail.com
 SENDER_PASSWORD=your-gmail-app-password
 RECIPIENT_EMAIL=recipient-email@gmail.com
 
-# GitHub API & Remote Server Config
-GITHUB_USERNAME=Uttham4
-GITHUB_TOKEN=ghp_your_github_personal_access_token
+# Server & Security Configuration
 SERVER_BASE_URL=https://linkedin-automation-xav0.onrender.com
 API_SECRET=your-secure-random-api-secret
+PORT=5000
+
+# Comment Reply Automation Configuration
+COMMENT_REPLY_MODE=approval             # 'approval' (default) or 'auto'
+AUTO_REPLY_ENABLED=false                # Set to true for automated reply publishing
+GLOBAL_AUTO_REPLY_DISABLED=false        # Global kill switch (set to true to halt auto replies)
+COMMENT_POLL_INTERVAL=300               # Background poll interval in seconds (default: 5 min)
+MAX_REPLIES_PER_HOUR=10                 # Maximum allowed comment replies per hour
+MAX_REPLIES_PER_DAY=50                  # Maximum allowed comment replies per day
 ```
 
 ---
@@ -104,7 +129,6 @@ API_SECRET=your-secure-random-api-secret
 ## 🌐 API Endpoints
 
 ### 1. Trigger GitHub Developer Vlog
-Analyzes recent commits and repository code to generate a project update post:
 ```bash
 curl -X POST https://linkedin-automation-xav0.onrender.com/trigger-github \
   -H "Content-Type: application/json" \
@@ -112,29 +136,63 @@ curl -X POST https://linkedin-automation-xav0.onrender.com/trigger-github \
   -d '{"force_latest": true}'
 ```
 
-### 2. Trigger Custom Topic Post
-Generates a post on any custom technical topic:
+### 2. List Comments & Suggested Replies
 ```bash
-curl -X POST https://linkedin-automation-xav0.onrender.com/trigger-generation \
-  -H "Content-Type: application/json" \
-  -H "X-API-Secret: your-secure-random-api-secret" \
-  -d '{"topic": "Autonomous AI Agents & Cloud Microservices"}'
+curl -X GET https://linkedin-automation-xav0.onrender.com/comments
 ```
 
-### 3. Approve & Publish Post
-Publishes the pending post draft to LinkedIn:
-```text
-GET https://linkedin-automation-xav0.onrender.com/approve?post_id=<POST_ID>
+### 3. Ingest Raw Comment (Webhook / Manual Test)
+```bash
+curl -X POST https://linkedin-automation-xav0.onrender.com/comments/ingest \
+  -H "Content-Type: application/json" \
+  -H "X-API-Secret: your-secure-random-api-secret" \
+  -d '{
+    "comment_id": "c_12345",
+    "post_urn": "urn:li:activity:789",
+    "comment_text": "Great insights on AI agent architecture!",
+    "post_context": "Building autonomous developer vlog agents."
+  }'
+```
+
+### 4. Approve & Publish Suggested Reply
+```bash
+curl -X POST https://linkedin-automation-xav0.onrender.com/comments/c_12345/approve
+```
+*(Or click the `GET /comments/<comment_id>/approve` link in email notifications).*
+
+### 5. Reject Suggested Reply
+```bash
+curl -X POST https://linkedin-automation-xav0.onrender.com/comments/c_12345/reject
+```
+
+### 6. Edit Suggested Reply Text
+```bash
+curl -X POST https://linkedin-automation-xav0.onrender.com/comments/c_12345/edit \
+  -H "Content-Type: application/json" \
+  -d '{"reply_text": "Thanks! We implemented it using SQLite WAL mode and NVIDIA NIM.", "approve": true}'
+```
+
+### 7. View / Update Configuration (Mode & Kill Switch)
+```bash
+curl -X POST https://linkedin-automation-xav0.onrender.com/comments/config \
+  -H "Content-Type: application/json" \
+  -H "X-API-Secret: your-secure-random-api-secret" \
+  -d '{
+    "reply_mode": "approval",
+    "global_kill_switch": false,
+    "max_replies_per_hour": 15
+  }'
 ```
 
 ---
 
-## ☁️ Cloud Deployment (Render / Docker)
+## 🧪 Testing
 
-1. Connect your GitHub repository to **Render.com**.
-2. Select **Web Service** with runtime **Docker** or **Python 3**.
-3. Add environment variables in the Render Dashboard.
-4. Deployment builds automatically using `Procfile` and `render.yaml`.
+Run the full test suite covering concurrency, prompt injection defenses, rate limits, and API mocking:
+
+```bash
+python test_suite.py
+```
 
 ---
 
@@ -142,4 +200,4 @@ GET https://linkedin-automation-xav0.onrender.com/approve?post_id=<POST_ID>
 
 Contributions, feedback, and pull requests are welcome! Feel free to star ⭐ the repository.
 
-*🤖 Auto-generated Dev Log System | Built with Python, NVIDIA NIM, and Cloud Microservices.*
+*🤖 Auto-generated Dev Log & AI Comment Reply System | Built with Python, NVIDIA NIM, and Cloud Microservices.*
