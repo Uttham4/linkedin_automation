@@ -41,10 +41,16 @@ An autonomous, cloud-ready LinkedIn content generation & developer vlog workflow
 - **🖼️ Smart Visual & Text-Only Fallback**:
   - Converts keywords into curated software developer search terms (`software developer dark workspace`) to prevent unrelated images.
   - Automatically falls back to clean, professional **text-only LinkedIn posts** if images are skipped or unavailable.
-- **⚡ Asynchronous Cloud Microservice**:
-  - Hosted on **Render.com** with **Gunicorn** and non-blocking background threads for SMTP notifications to guarantee sub-second HTTP response times without worker timeouts.
-- **🔐 Stateless Security & Persistent Storage**:
-  - Uses signed JSON tokens and `API_SECRET` headers to prevent unauthorized post triggers.
+- **⚡ Multi-Worker Concurrency & Transactional Persistence**:
+  - Powered by **SQLite WAL (Write-Ahead Logging)** mode with atomic check-and-claim patterns.
+  - Eliminates stale in-memory state and race conditions across multiple **Gunicorn** workers, guaranteeing that posts generated on one worker are immediately visible and claimable by another worker without double-publishing.
+- **🛡️ Indirect Prompt Injection Defense-in-Depth**:
+  - Isolates untrusted repository files, commit messages, and topics within strict XML delimiter tags (`<untrusted_code_context>`, `<untrusted_commits>`).
+  - Strict **System vs User role separation** explicitly mandating that untrusted context is passive data, never executable instructions.
+  - Regex-based heuristic sanitizer neutralizes jailbreak directives (`ignore previous instructions`, `system override`, `dan mode`) and escapes delimiter tags.
+  - Output guardrails validate generated posts against phishing redirects and leak markers.
+- **🔐 API Secret Protection & Asynchronous Delivery**:
+  - Uses `API_SECRET` headers for webhook security and background daemon threads for non-blocking SMTP notification delivery.
 - **⏰ Autonomous Daily Execution**:
   - Integrated with **GitHub Actions** (`.github/workflows/daily_post.yml`) to generate dev logs automatically every day.
 
@@ -55,7 +61,9 @@ An autonomous, cloud-ready LinkedIn content generation & developer vlog workflow
 | Category | Technology / API |
 | :--- | :--- |
 | **Core Engine** | Python 3.14 / Flask / Gunicorn |
+| **Persistence** | SQLite3 (WAL Mode, Multi-Process Transactional Store) |
 | **AI Post Generation** | NVIDIA NIM API (`moonshotai/kimi-k3`) |
+| **AI Safety & Defense** | Role Separation, XML Boundary Delimiters, Regex Injection Filters |
 | **Visual Media** | Unsplash REST API (`api.unsplash.com`) |
 | **Publishing Platform** | LinkedIn REST API v2 (`/rest/posts` & `/rest/images`) |
 | **Code Inspection** | GitHub REST API v3 |
