@@ -1108,22 +1108,16 @@ def fetch_linkedin_comments(post_urn: str = None) -> list[dict]:
 def publish_linkedin_reply(parent_comment_urn: str, reply_text: str) -> tuple[bool, str]:
     """
     Publishes a reply to a LinkedIn comment using official LinkedIn APIs.
+    Tries versioned REST API (/rest/socialActions) and standard API (/v2/socialActions).
     Handles HTTP status codes 200, 201, 401, 403, 429, and server errors.
     """
     if not parent_comment_urn or not reply_text:
         return False, "Missing parent_comment_urn or reply_text"
 
     linkedin_version = os.getenv("LINKEDIN_API_VERSION", "202608")
-    headers = {
-        "Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN}",
-        "LinkedIn-Version": linkedin_version,
-        "X-Restli-Protocol-Version": "2.0.0",
-        "Content-Type": "application/json"
-    }
-
     encoded_parent_urn = requests.utils.quote(parent_comment_urn)
-    url = f"https://api.linkedin.com/rest/socialActions/{encoded_parent_urn}/comments"
 
+    # Payload format
     payload = {
         "actor": AUTHOR_URN,
         "object": parent_comment_urn,
@@ -1132,18 +1126,40 @@ def publish_linkedin_reply(parent_comment_urn: str, reply_text: str) -> tuple[bo
         }
     }
 
+    # 1. Try Primary Versioned REST Endpoint
+    url_rest = f"https://api.linkedin.com/rest/socialActions/{encoded_parent_urn}/comments"
+    headers_rest = {
+        "Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN}",
+        "LinkedIn-Version": linkedin_version,
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json"
+    }
+
     logger.info(f"Publishing reply to LinkedIn comment {parent_comment_urn}...")
     try:
-        res = requests.post(url, headers=headers, json=payload, timeout=15)
+        res = requests.post(url_rest, headers=headers_rest, json=payload, timeout=15)
         if res.status_code in (200, 201):
-            logger.info(f"Successfully published reply to LinkedIn comment {parent_comment_urn}!")
+            logger.info(f"Successfully published reply to LinkedIn comment {parent_comment_urn} via REST API!")
             return True, "Published successfully"
-        elif res.status_code == 401:
+
+        # 2. Try Fallback Standard v2 Endpoint
+        url_v2 = f"https://api.linkedin.com/v2/socialActions/{encoded_parent_urn}/comments"
+        headers_v2 = {
+            "Authorization": f"Bearer {LINKEDIN_ACCESS_TOKEN}",
+            "X-Restli-Protocol-Version": "2.0.0",
+            "Content-Type": "application/json"
+        }
+        res_v2 = requests.post(url_v2, headers=headers_v2, json=payload, timeout=15)
+        if res_v2.status_code in (200, 201):
+            logger.info(f"Successfully published reply to LinkedIn comment {parent_comment_urn} via v2 API!")
+            return True, "Published successfully"
+
+        if res.status_code == 401:
             err_msg = "LinkedIn API Error 401 Unauthorized: Access token invalid or expired."
             logger.error(err_msg)
             return False, err_msg
         elif res.status_code == 403:
-            err_msg = "LinkedIn API Error 403 Forbidden: Missing OAuth permission scope (w_member_social / w_organization_social / w_social_actions)."
+            err_msg = f"LinkedIn API Error 403 Forbidden: Missing required OAuth permission scope (w_member_social or r_member_social). API Details: {res.text}"
             logger.error(err_msg)
             return False, err_msg
         elif res.status_code == 429:
@@ -1157,6 +1173,7 @@ def publish_linkedin_reply(parent_comment_urn: str, reply_text: str) -> tuple[bo
     except Exception as e:
         logger.exception(f"Exception publishing LinkedIn reply: {e}")
         return False, str(e)
+
 
 def process_incoming_comments(comments: list[dict], post_context: str = "") -> list[dict]:
     """
